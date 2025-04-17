@@ -1,16 +1,19 @@
 {
   "name": "vouch-bot",
   "version": "1.0.0",
-  "description": "A Discord bot for vouching",
+  "description": "A Discord bot for vouching with ratings and reviews.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "dependencies": {
-    "discord.js": "^14.0.0",  
-    "express": "^4.17.1"     
-  },
   "engines": {
-    "node": "16.x"
-  }
+    "node": "18.x"
+  },
+  "dependencies": {
+    "discord.js": "^14.0.0",
+    "express": "^4.18.2"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
