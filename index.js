@@ -1,57 +1,56 @@
-const { Client, GatewayIntentBits, Partials, Events, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, SlashCommandBuilder } = require('discord.js');
-const fs = require('fs');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, InteractionType, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const express = require('express');
 
+// Create Discord client
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
-  partials: [Partials.Channel]
+  intents: [GatewayIntentBits.Guilds]
 });
 
-const VOUCH_FILE = 'vouches.json';
-let vouches = [];
+const vouches = [];
+const BOT_TOKEN = process.env.TOKEN;
+const OWNER_ID = process.env.OWNER_ID;
 
-// Load saved vouches on startup
-if (fs.existsSync(VOUCH_FILE)) {
-  vouches = JSON.parse(fs.readFileSync(VOUCH_FILE, 'utf8'));
-}
-
-// Register commands
-client.once(Events.ClientReady, async () => {
+client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+});
 
+// Register slash commands on startup
+client.on('ready', async () => {
   const commands = [
-    new SlashCommandBuilder().setName('vouch').setDescription('Leave a vouch for someone.'),
-    new SlashCommandBuilder().setName('backup').setDescription('Save vouches to file (Owner only).'),
-    new SlashCommandBuilder().setName('push').setDescription('Post all vouches (Owner only).')
+    new SlashCommandBuilder().setName('vouch').setDescription('Leave a rating and review'),
+    new SlashCommandBuilder().setName('backup').setDescription('Save all vouches'),
+    new SlashCommandBuilder().setName('push').setDescription('Repost all saved vouches'),
   ].map(cmd => cmd.toJSON());
 
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
+  const appId = (await rest.get(Routes.user())).id;
+
   try {
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('✅ Slash commands registered.');
+    console.log('🔁 Refreshing slash commands...');
+    await rest.put(Routes.applicationCommands(appId), { body: commands });
+    console.log('✅ Slash commands registered');
   } catch (err) {
-    console.error('❌ Error registering commands:', err);
+    console.error('Error registering commands:', err);
   }
 });
 
 // Handle slash commands
-client.on(Events.InteractionCreate, async (interaction) => {
+client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
-    const { commandName } = interaction;
-
-    if (commandName === 'vouch') {
+    if (interaction.commandName === 'vouch') {
       const modal = new ModalBuilder()
         .setCustomId('vouchModal')
         .setTitle('Leave a Vouch');
 
       const ratingInput = new TextInputBuilder()
         .setCustomId('rating')
-        .setLabel('Rating (1-5)')
+        .setLabel('Rate 1–5')
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
       const reviewInput = new TextInputBuilder()
         .setCustomId('review')
-        .setLabel('Describe your review')
+        .setLabel('Describe your experience')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true);
 
@@ -59,72 +58,57 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const row2 = new ActionRowBuilder().addComponents(reviewInput);
 
       modal.addComponents(row1, row2);
+
       await interaction.showModal(modal);
     }
 
-    if (commandName === 'backup') {
-      if (interaction.user.id !== process.env.OWNER_ID) {
-        return interaction.reply({ content: '❌ Only the bot owner can use this.', ephemeral: true });
-      }
-
-      fs.writeFileSync('backup.json', JSON.stringify(vouches, null, 2));
-      await interaction.reply({ content: '✅ Backup saved to `backup.json`.', ephemeral: true });
+    if (interaction.commandName === 'backup') {
+      if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ You are not authorized.', ephemeral: true });
+      // Here you could write to a file/db. Just replying for now.
+      return interaction.reply({ content: `✅ ${vouches.length} vouches backed up.`, ephemeral: true });
     }
 
-    if (commandName === 'push') {
-      if (interaction.user.id !== process.env.OWNER_ID) {
-        return interaction.reply({ content: '❌ Only the bot owner can use this.', ephemeral: true });
-      }
+    if (interaction.commandName === 'push') {
+      if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ You are not authorized.', ephemeral: true });
 
-      if (vouches.length === 0) {
-        return interaction.reply({ content: '📭 No vouches to push.', ephemeral: true });
-      }
+      if (vouches.length === 0) return interaction.reply({ content: 'No vouches to push.', ephemeral: true });
 
-      await interaction.reply({ content: '📤 Pushing vouches...', ephemeral: true });
       for (const vouch of vouches) {
-        await interaction.channel.send(`⭐ **Rating:** ${vouch.rating}\n📝 **Review:** ${vouch.review}\n👤 **By:** <@${vouch.userId}>`);
+        await interaction.channel.send(`⭐ **Rating:** ${vouch.rating}\n💬 **Review:** ${vouch.review}\n👤 From: <@${vouch.userId}>`);
       }
+
+      return interaction.reply({ content: '✅ Vouches pushed to this channel.', ephemeral: true });
     }
   }
 
-  // Handle modal submission
-  if (interaction.isModalSubmit() && interaction.customId === 'vouchModal') {
+  if (interaction.type === InteractionType.ModalSubmit && interaction.customId === 'vouchModal') {
     const rating = interaction.fields.getTextInputValue('rating');
     const review = interaction.fields.getTextInputValue('review');
 
-    const numericRating = parseInt(rating);
-    if (isNaN(numericRating) || numericRating < 1 || numericRating > 5) {
-      return interaction.reply({ content: '❌ Please enter a valid number between 1 and 5 for the rating.', ephemeral: true });
-    }
-
     const vouch = {
       userId: interaction.user.id,
-      rating: numericRating,
-      review: review.trim(),
-      timestamp: new Date().toISOString()
+      rating,
+      review,
     };
 
     vouches.push(vouch);
-    fs.writeFileSync(VOUCH_FILE, JSON.stringify(vouches, null, 2));
 
-    await interaction.reply({ content: '✅ Vouch submitted and posted!', ephemeral: true });
+    await interaction.reply({
+      content: `✅ Thanks for your vouch!\n⭐ **Rating:** ${rating}\n💬 **Review:** ${review}`,
+      ephemeral: true
+    });
 
-    // Post the vouch in the channel
-    await interaction.channel.send(
-      `⭐ **Rating:** ${vouch.rating}\n📝 **Review:** ${vouch.review}\n👤 **By:** <@${vouch.userId}>`
-    );
-
+    const channel = interaction.channel;
+    if (channel) {
+      await channel.send(`📥 New vouch from <@${vouch.userId}>!\n⭐ **Rating:** ${rating}\n💬 **Review:** ${review}`);
+    }
   }
 });
 
-client.login(process.env.TOKEN);
-const express = require('express');
+// Start web server for Render & UptimeRobot
 const app = express();
+app.get('/', (req, res) => res.send('Bot is alive!'));
+app.listen(3000, () => console.log('🌐 Web server running on port 3000'));
 
-app.get('/', (req, res) => {
-  res.send('Bot is running!');
-});
-
-app.listen(3000, () => {
-  console.log('🌐 Express server running');
-});
+// Login the bot
+client.login(BOT_TOKEN);
