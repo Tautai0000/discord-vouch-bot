@@ -107,8 +107,10 @@ client.on('interactionCreate', async interaction => {
 
 // Start web server for Render & UptimeRobot
 const app = express();
+const PORT = process.env.PORT || 3000;  // Use the port provided by Render (or 3000 locally)
+
 app.get('/', (req, res) => res.send('Bot is alive!'));
-app.listen(3000, () => console.log('🌐 Web server running on port 3000'));
+app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
 
 // Login the bot
 client.login(BOT_TOKEN);
