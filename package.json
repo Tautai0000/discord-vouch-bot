@@ -1,0 +1,16 @@
+{
+  "name": "vouch-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot for vouching",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.0.0",  
+    "express": "^4.17.1"     
+  },
+  "engines": {
+    "node": "16.x"
+  }
+}
