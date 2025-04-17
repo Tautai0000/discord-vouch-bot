@@ -1,6 +1,5 @@
 const { Client, GatewayIntentBits, Partials, Events, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
-require('dotenv').config();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
