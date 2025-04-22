@@ -15,6 +15,8 @@ process.on('unhandledRejection', (reason, promise) => {
 if (!process.env.TOKEN || !process.env.VOUCH_CHANNEL_ID || !process.env.VOUCH_LOG_CHANNEL_ID || !process.env.OWNER_ID) {
     console.error('Missing required environment variables!');
     process.exit(1);  // Exit the bot if necessary environment variables are missing
+} else {
+    console.log('Environment variables loaded successfully!');
 }
 
 const client = new Client({
@@ -35,6 +37,7 @@ client.once('ready', () => {
 
 // Handle incoming interactions
 client.on('interactionCreate', async (interaction) => {
+    console.log('Interaction received:', interaction); // Log the interaction for debugging
     if (interaction.isCommand()) {
         const { commandName, user } = interaction;
 
@@ -73,6 +76,7 @@ client.on('interactionCreate', async (interaction) => {
 
     // Handle when the user selects a star rating
     if (interaction.isSelectMenu()) {
+        console.log('Star rating selected:', interaction.values[0]); // Debugging the selected star rating
         if (interaction.customId === 'star-rating') {
             const starRating = interaction.values[0]; // Get the star rating selected
 
