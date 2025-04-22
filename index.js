@@ -1,8 +1,22 @@
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, EmbedBuilder } = require('discord.js');
 const dotenv = require('dotenv').config();
-const fs = require('fs');
 
-// Create the bot client
+// Add process error handling
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception: ', error);
+    process.exit(1);  // Exiting the process with a failure code
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at: ', promise, 'reason: ', reason);
+});
+
+// Check if .env variables are loaded correctly
+if (!process.env.TOKEN || !process.env.VOUCH_CHANNEL_ID || !process.env.VOUCH_LOG_CHANNEL_ID || !process.env.OWNER_ID) {
+    console.error('Missing required environment variables!');
+    process.exit(1);  // Exit the bot if necessary environment variables are missing
+}
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -11,17 +25,26 @@ const client = new Client({
     ]
 });
 
+// Define the owner ID (from the .env file)
+const OWNER_ID = process.env.OWNER_ID;
+
 // Command to trigger the Vouch interaction
 client.once('ready', () => {
     console.log('Bot is ready!');
 });
 
-// Slash command registration
-client.on('interactionCreate', async interaction => {
+// Handle incoming interactions
+client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
     const { commandName, user } = interaction;
 
+    // Only allow owner to execute certain commands
+    if (user.id !== OWNER_ID) {
+        return interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
+    }
+
+    // Handle the vouch command
     if (commandName === 'vouch') {
         // Create a dropdown for stars (1-5) and a text input field for the explanation
         const starSelectMenu = new StringSelectMenuBuilder()
@@ -50,14 +73,10 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.isButton()) {
         if (interaction.customId === 'vouch-submit') {
-            // We need to get the selected star rating and explanation from the user
+            // Handle the vouch submission
             const starRating = interaction.message.components[0].components[0].getValue();
-            if (!starRating) {
-                return await interaction.reply({ content: '❌ Please select a star rating first!', ephemeral: true });
-            }
+            const explanation = interaction.message.content; // Assume explanation is in the initial message
 
-            const explanation = interaction.message.content; // Assume explanation was in the initial message
-            
             // Send to the Vouch channel
             const vouchChannel = interaction.guild.channels.cache.get(process.env.VOUCH_CHANNEL_ID);
             const vouchEmbed = new EmbedBuilder()
@@ -93,4 +112,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 // Login to the bot
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN).catch(console.error);  // Catch login errors
