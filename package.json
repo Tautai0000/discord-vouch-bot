@@ -1,13 +1,13 @@
 {
   "name": "discord-vouch-bot",
   "version": "1.0.0",
-  "description": "A simple Discord bot to vouch for users with a stylish embed.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "discord.js": "^14.11.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "fs": "^0.0.1-security"
   }
 }
