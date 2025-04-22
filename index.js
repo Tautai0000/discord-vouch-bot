@@ -1,48 +1,49 @@
-const express = require('express');
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-require('dotenv').config();
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
+const dotenv = require('dotenv').config();
+const fs = require('fs');
 
-const app = express();
+// Initialize the bot client
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
 });
 
-// Make sure the bot is logged in
-client.once('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
-});
+client.once('ready', async () => {
+    const CLIENT_ID = client.user.id;
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+    
+    // Register slash commands with Discord
+    const commands = [
+        new SlashCommandBuilder().setName('vouch').setDescription('Vouch for someone'),
+        new SlashCommandBuilder().setName('backup').setDescription('Backup all vouches (owner only)'),
+        new SlashCommandBuilder().setName('push').setDescription('Push saved vouches (owner only)')
+    ].map(command => command.toJSON());
 
-// Set up the bot commands and their behavior
-client.on('messageCreate', async message => {
-    if (message.author.bot) return;
-
-    if (message.content.toLowerCase() === '!vouch') {
-        const user = message.author;
-        const guild = message.guild;
-
-        const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle(`Vouch for ${user.username}`)
-            .setDescription(`✅ ${user} has been vouched for!`)
-            .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-            .setAuthor({ name: guild.name, iconURL: guild.iconURL({ dynamic: true }) || null })
-            .setFooter({ text: 'Thanks for the vouch!' })
-            .setTimestamp();
-
-        await message.channel.send({ embeds: [embed] });
+    try {
+        console.log('Started refreshing application (/) commands.');
+        await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+        console.log('Successfully reloaded application (/) commands.');
+    } catch (error) {
+        console.error(error);
     }
 });
 
-// Start the Express server
-const PORT = process.env.PORT || 3000;
+// Handle slash command interactions
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
 
-app.get('/', (req, res) => {
-    res.send('Bot is running!');
+    const { commandName } = interaction;
+
+    if (commandName === 'vouch') {
+        await interaction.reply('Vouch received!'); // Quick response to avoid timeout
+    } else if (commandName === 'backup') {
+        await interaction.reply('Backup initiated!'); // Quick response
+    } else if (commandName === 'push') {
+        await interaction.reply('Pushing vouches...'); // Quick response
+    }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
-
-// Login to Discord bot
 client.login(process.env.TOKEN);
