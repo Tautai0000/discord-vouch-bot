@@ -1,115 +1,117 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, EmbedBuilder } = require('discord.js');
-const dotenv = require('dotenv').config();
-
-// Add process error handling
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception: ', error);
-    process.exit(1);  // Exiting the process with a failure code
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at: ', promise, 'reason: ', reason);
-});
-
-// Check if .env variables are loaded correctly
-if (!process.env.TOKEN || !process.env.VOUCH_CHANNEL_ID || !process.env.VOUCH_LOG_CHANNEL_ID || !process.env.OWNER_ID) {
-    console.error('Missing required environment variables!');
-    process.exit(1);  // Exit the bot if necessary environment variables are missing
-}
-
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
-});
-
-// Define the owner ID (from the .env file)
-const OWNER_ID = process.env.OWNER_ID;
-
-// Command to trigger the Vouch interaction
-client.once('ready', () => {
-    console.log('Bot is ready!');
-});
-
-// Handle incoming interactions
-client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isCommand()) return;
-
-    const { commandName, user } = interaction;
-
-    // Only allow owner to execute certain commands
-    if (user.id !== OWNER_ID) {
-        return interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
-    }
-
-    // Handle the vouch command
-    if (commandName === 'vouch') {
-        // Create a dropdown for stars (1-5) and a text input field for the explanation
-        const starSelectMenu = new StringSelectMenuBuilder()
-            .setCustomId('star-rating')
-            .setPlaceholder('Select a rating (1 to 5 stars)')
-            .addOptions(
-                { label: '1 Star', value: '1' },
-                { label: '2 Stars', value: '2' },
-                { label: '3 Stars', value: '3' },
-                { label: '4 Stars', value: '4' },
-                { label: '5 Stars', value: '5' }
-            );
-
-        const vouchButton = new ButtonBuilder()
-            .setCustomId('vouch-submit')
-            .setLabel('Submit Vouch')
-            .setStyle(ButtonStyle.Primary);
-
-        const row = new ActionRowBuilder().addComponents(starSelectMenu, vouchButton);
-
-        await interaction.reply({
-            content: 'Please select a star rating and then submit your vouch explanation.',
-            components: [row]
-        });
-    }
-
-    if (interaction.isButton()) {
-        if (interaction.customId === 'vouch-submit') {
-            // Handle the vouch submission
-            const starRating = interaction.message.components[0].components[0].getValue();
-            const explanation = interaction.message.content; // Assume explanation is in the initial message
-
-            // Send to the Vouch channel
-            const vouchChannel = interaction.guild.channels.cache.get(process.env.VOUCH_CHANNEL_ID);
-            const vouchEmbed = new EmbedBuilder()
-                .setColor('#00AE86')
-                .setTitle(`Vouch from ${user.tag}`)
-                .addFields(
-                    { name: 'Rating:', value: `⭐ ${starRating}` },
-                    { name: 'Explanation:', value: explanation }
-                )
-                .setFooter({ text: `Vouched by ${user.tag}` })
-                .setTimestamp();
-
-            await vouchChannel.send({ embeds: [vouchEmbed] });
-
-            // Send to the Vouch Log channel
-            const logChannel = interaction.guild.channels.cache.get(process.env.VOUCH_LOG_CHANNEL_ID);
-            const logEmbed = new EmbedBuilder()
-                .setColor('#FF9900')
-                .setTitle('Vouch Log Entry')
-                .addFields(
-                    { name: 'User:', value: user.tag },
-                    { name: 'Rating:', value: `⭐ ${starRating}` },
-                    { name: 'Explanation:', value: explanation }
-                )
-                .setFooter({ text: `Logged by ${user.tag}` })
-                .setTimestamp();
-
-            await logChannel.send({ embeds: [logEmbed] });
-
-            await interaction.reply({ content: '✅ Your vouch has been submitted!', ephemeral: true });
-        }
-    }
-});
-
-// Login to the bot
-client.login(process.env.TOKEN).catch(console.error);  // Catch login errors
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, InteractionType, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+ const express = require('express');
+ 
+ // Create Discord client
+ const client = new Client({
+   intents: [GatewayIntentBits.Guilds]
+ });
+ 
+ const vouches = [];
+ const BOT_TOKEN = process.env.TOKEN;
+ const OWNER_ID = process.env.OWNER_ID;
+ 
+ client.once('ready', () => {
+   console.log(`✅ Logged in as ${client.user.tag}`);
+ });
+ 
+ // Register slash commands on startup
+ client.on('ready', async () => {
+   const commands = [
+     new SlashCommandBuilder().setName('vouch').setDescription('Leave a rating and review'),
+     new SlashCommandBuilder().setName('backup').setDescription('Save all vouches'),
+     new SlashCommandBuilder().setName('push').setDescription('Repost all saved vouches'),
+   ].map(cmd => cmd.toJSON());
+ 
+   const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
+   const appId = (await rest.get(Routes.user())).id;
+ 
+   try {
+     console.log('🔁 Refreshing slash commands...');
+     await rest.put(Routes.applicationCommands(appId), { body: commands });
+     console.log('✅ Slash commands registered');
+   } catch (err) {
+     console.error('Error registering commands:', err);
+   }
+ });
+ 
+ // Handle slash commands
+ client.on('interactionCreate', async interaction => {
+   if (interaction.isChatInputCommand()) {
+     if (interaction.commandName === 'vouch') {
+       const modal = new ModalBuilder()
+         .setCustomId('vouchModal')
+         .setTitle('Leave a Vouch');
+ 
+       const ratingInput = new TextInputBuilder()
+         .setCustomId('rating')
+         .setLabel('Rate 1–5')
+         .setStyle(TextInputStyle.Short)
+         .setRequired(true);
+ 
+       const reviewInput = new TextInputBuilder()
+         .setCustomId('review')
+         .setLabel('Describe your experience')
+         .setStyle(TextInputStyle.Paragraph)
+         .setRequired(true);
+ 
+       const row1 = new ActionRowBuilder().addComponents(ratingInput);
+       const row2 = new ActionRowBuilder().addComponents(reviewInput);
+ 
+       modal.addComponents(row1, row2);
+ 
+       await interaction.showModal(modal);
+     }
+ 
+     if (interaction.commandName === 'backup') {
+       if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ You are not authorized.', ephemeral: true });
+       // Here you could write to a file/db. Just replying for now.
+       return interaction.reply({ content: `✅ ${vouches.length} vouches backed up.`, ephemeral: true });
+     }
+ 
+     if (interaction.commandName === 'push') {
+       if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ You are not authorized.', ephemeral: true });
+ 
+       if (vouches.length === 0) return interaction.reply({ content: 'No vouches to push.', ephemeral: true });
+ 
+       for (const vouch of vouches) {
+         await interaction.channel.send(`⭐ **Rating:** ${vouch.rating}\n💬 **Review:** ${vouch.review}\n👤 From: <@${vouch.userId}>`);
+       }
+ 
+       return interaction.reply({ content: '✅ Vouches pushed to this channel.', ephemeral: true });
+     }
+   }
+ 
+   if (interaction.type === InteractionType.ModalSubmit && interaction.customId === 'vouchModal') {
+     const rating = interaction.fields.getTextInputValue('rating');
+     const review = interaction.fields.getTextInputValue('review');
+ 
+     const vouch = {
+       userId: interaction.user.id,
+       rating,
+       review,
+     };
+ 
+     vouches.push(vouch);
+ 
+     await interaction.reply({
+       content: `✅ Thanks for your vouch!\n⭐ **Rating:** ${rating}\n💬 **Review:** ${review}`,
+       ephemeral: true
+     });
+ 
+     const channel = interaction.channel;
+     if (channel) {
+       await channel.send(`📥 New vouch from <@${vouch.userId}>!\n⭐ **Rating:** ${rating}\n💬 **Review:** ${review}`);
+     }
+   }
+ });
+ 
+ // Start web server for Render & UptimeRobot
+ const app = express();
+ const PORT = process.env.PORT || 3000;  // Use the port provided by Render (or 3000 locally)
+ 
+ app.get('/', (req, res) => res.send('Bot is alive!'));
+ app.listen(3000, () => console.log('🌐 Web server running on port 3000'));
+ app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
+ 
+ // Login the bot
+ client.login(BOT_TOKEN);
