@@ -106,12 +106,13 @@ const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, Interactio
  });
  
  // Start web server for Render & UptimeRobot
- const app = express();
- const PORT = process.env.PORT || 3000;  // Use the port provided by Render (or 3000 locally)
- 
- app.get('/', (req, res) => res.send('Bot is alive!'));
- app.listen(3000, () => console.log('🌐 Web server running on port 3000'));
- app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
+const app = express();
+const PORT = process.env.PORT || 3000;  // Render provides PORT automatically
+
+app.get('/', (req, res) => res.send('Bot is alive!'));
+
+// Start only one server on the correct port
+app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
  
  // Login the bot
  client.login(BOT_TOKEN);
